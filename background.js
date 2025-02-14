@@ -1,11 +1,22 @@
+chrome.runtime.onInstalled.addListener(() => {
+    chrome.storage.local.set({ searchLines: [], currentIndex: 0, stopSearch: false, searchCount: 0 });
+});
+
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     if (message.action === "startSearching") {
-        chrome.storage.local.get(["searchLines", "currentIndex", "stopSearch"], function (data) {
+        chrome.storage.local.get(["searchLines", "currentIndex", "stopSearch", "searchCount"], function (data) {
             if (data.stopSearch) return;
             if (data.searchLines && data.searchLines.length > 0) {
                 executeSearch(data.searchLines, data.currentIndex);
             }
         });
+    } else if (message.action === "saveScript") {
+        chrome.storage.local.set({ savedScript: message.script });
+    } else if (message.action === "loadScript") {
+        chrome.storage.local.get(["savedScript"], function (data) {
+            sendResponse({ script: data.savedScript || "" });
+        });
+        return true;
     }
 });
 
