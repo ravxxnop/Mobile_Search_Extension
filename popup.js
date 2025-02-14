@@ -31,8 +31,17 @@ document.getElementById('stopButton').addEventListener('click', function () {
 // सेव की गई स्क्रिप्ट को लोड करने का ऑप्शन
 document.getElementById('loadScriptButton').addEventListener('click', function () {
     chrome.storage.local.get(["savedScript"], function (data) {
-        if (data.savedScript) {
-            alert("Loaded script:\n" + data.savedScript.join("\n"));
+        if (data.savedScript && data.savedScript.length > 0) {
+            // टेक्स्ट फाइल बनाएं और उसे file input में लोड करें
+            const fileContent = data.savedScript.join("\n");
+            const blob = new Blob([fileContent], { type: "text/plain" });
+            const file = new File([blob], "saved_script.txt", { type: "text/plain" });
+
+            const dataTransfer = new DataTransfer();
+            dataTransfer.items.add(file);
+            document.getElementById('fileInput').files = dataTransfer.files;
+
+            alert("Saved script loaded successfully!");
         } else {
             alert("No script saved.");
         }
