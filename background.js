@@ -1,17 +1,21 @@
 chrome.runtime.onInstalled.addListener(() => {
-    chrome.storage.local.set({ searchLines: [], currentIndex: 0, stopSearch: false, searchCount: 0 });
+    chrome.storage.local.set({ searchLines: [], currentIndex: 0, stopSearch: false, searchCount: 0, searchedQueries: [] });
 });
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     if (message.action === "startSearching") {
-        chrome.storage.local.get(["searchLines", "currentIndex", "stopSearch", "searchCount"], function (data) {
-            if (data.stopSearch) return;
+        chrome.storage.local.get(["searchLines", "currentIndex", "stopSearch", "searchCount", "searchedQueries"], function (data) {
+            if (data.stopSearch || (data.searchCount || 0) >= 30) return;
             if (data.searchLines && data.searchLines.length > 0) {
-                executeSearch(data.searchLines, data.currentIndex);
+                executeSearch(data.searchLines, data.currentIndex, data.searchedQueries);
             }
         });
-    } else if (message.action === "saveScript") {
-        chrome.storage.local.set({ savedScript: message.script });
+    } else if (message.action === "saveScriptPrompt") {
+        let userConsent = confirm("क्या आप इस स्क्रिप्ट को सेव करना चाहते हैं?");
+        if (userConsent) {
+            chrome.storage.local.set({ savedScript: message.script });
+            alert("स्क्रिप्ट सेव हो गई!");
+        }
     } else if (message.action === "loadScript") {
         chrome.storage.local.get(["savedScript"], function (data) {
             sendResponse({ script: data.savedScript || "" });
@@ -20,14 +24,22 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     }
 });
 
-function executeSearch(lines, index) {
-    chrome.storage.local.get(["stopSearch", "searchCount"], function (data) {
+function executeSearch(lines, index, searchedQueries) {
+    chrome.storage.local.get(["stopSearch", "searchCount", "searchedQueries"], function (data) {
         if (data.stopSearch || index >= lines.length || (data.searchCount || 0) >= 30) return;
 
         let searchText = lines[index].trim();
+        
+        // अगर यह सर्च पहले हो चुकी है तो स्किप करें
+        if (searchedQueries.includes(searchText)) {
+            chrome.storage.local.set({ currentIndex: index + 1 });
+            executeSearch(lines, index + 1, searchedQueries);
+            return;
+        }
+
         if (searchText === "") {
             chrome.storage.local.set({ currentIndex: index + 1 });
-            executeSearch(lines, index + 1);
+            executeSearch(lines, index + 1, searchedQueries);
             return;
         }
 
@@ -37,13 +49,15 @@ function executeSearch(lines, index) {
 
             typeSearchQuery(tabId, searchText, 0, function () {
                 setTimeout(() => {
-                    chrome.storage.local.get(["stopSearch", "searchCount"], function (data) {
+                    chrome.storage.local.get(["stopSearch", "searchCount", "searchedQueries"], function (data) {
                         if (!data.stopSearch) {
+                            searchedQueries.push(searchText); // सर्च को रिकॉर्ड करें
                             chrome.storage.local.set({ 
                                 currentIndex: index + 1,
-                                searchCount: (data.searchCount || 0) + 1 
+                                searchCount: (data.searchCount || 0) + 1,
+                                searchedQueries: searchedQueries
                             });
-                            executeSearch(lines, index + 1);
+                            executeSearch(lines, index + 1, searchedQueries);
                         }
                     });
                 }, 10000);
