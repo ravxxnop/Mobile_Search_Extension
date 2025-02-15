@@ -12,7 +12,7 @@ document.getElementById('startButton').addEventListener('click', function () {
 
         let saveConfirm = confirm("क्या आप इस स्क्रिप्ट को सेव करना चाहते हैं?");
         if (saveConfirm) {
-            chrome.storage.local.set({ searchLines: lines, currentIndex: 0 });
+            chrome.storage.local.set({ savedScript: lines, searchLines: lines, currentIndex: 0 });
             alert("स्क्रिप्ट सेव हो गई!");
         }
 
@@ -27,11 +27,10 @@ document.getElementById('stopButton').addEventListener('click', function () {
     chrome.storage.local.set({ stopSearch: true });
 });
 
-// सेव की गई स्क्रिप्ट और करंट इंडेक्स को लोड करने का ऑप्शन
 document.getElementById('loadScriptButton').addEventListener('click', function () {
-    chrome.runtime.sendMessage({ action: "loadScript" }, function (response) {
-        if (response.script.length > 0) {
-            const fileContent = response.script.join("\n");
+    chrome.storage.local.get(["savedScript", "currentIndex"], function (data) {
+        if (data.savedScript && data.savedScript.length > 0) {
+            const fileContent = data.savedScript.join("\n");
             const blob = new Blob([fileContent], { type: "text/plain" });
             const file = new File([blob], "saved_script.txt", { type: "text/plain" });
 
@@ -39,8 +38,7 @@ document.getElementById('loadScriptButton').addEventListener('click', function (
             dataTransfer.items.add(file);
             document.getElementById('fileInput').files = dataTransfer.files;
 
-            // स्क्रिप्ट और करंट इंडेक्स लोड होने के बाद स्टार्ट करें
-            alert(`Script loaded successfully! Resuming from search #${response.currentIndex + 1}`);
+            alert(`Script loaded successfully! Resuming from search #${(data.currentIndex || 0) + 1}`);
             chrome.storage.local.set({ stopSearch: false }, function () {
                 chrome.runtime.sendMessage({ action: "startSearching" });
             });
