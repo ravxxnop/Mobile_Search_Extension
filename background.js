@@ -15,14 +15,12 @@ chrome.runtime.onStartup.addListener(() => {
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     if (message.action === "startSearching") {
         chrome.storage.local.get(["searchLines", "currentIndex", "stopSearch", "searchCount", "searchedQueries"], function (data) {
-            if (data.stopSearch || (data.searchCount || 0) >= 30) return;
-            if (data.searchLines && data.searchLines.length > 0) {
+            if (!data.stopSearch && (data.searchCount || 0) < 30 && data.searchLines?.length > 0) {
                 executeSearch(data.searchLines, data.currentIndex, data.searchedQueries);
             }
         });
     } else if (message.action === "saveScriptPrompt") {
-        let userConsent = confirm("क्या आप इस स्क्रिप्ट को सेव करना चाहते हैं?");
-        if (userConsent) {
+        if (confirm("क्या आप इस स्क्रिप्ट को सेव करना चाहते हैं?")) {
             chrome.storage.local.set({ savedScript: message.script });
             alert("स्क्रिप्ट सेव हो गई!");
         }
@@ -39,11 +37,8 @@ function executeSearch(lines, index, searchedQueries) {
         if (data.stopSearch || index >= lines.length || (data.searchCount || 0) >= 30) return;
 
         let searchText = lines[index].trim();
-
-        if (searchedQueries.includes(searchText) || searchText === "") {
-            chrome.storage.local.set({ currentIndex: index + 1 }, function () {
-                executeSearch(lines, index + 1, searchedQueries);
-            });
+        if (!searchText || searchedQueries.includes(searchText)) {
+            chrome.storage.local.set({ currentIndex: index + 1 }, () => executeSearch(lines, index + 1, searchedQueries));
             return;
         }
 
@@ -60,9 +55,7 @@ function executeSearch(lines, index, searchedQueries) {
                                 currentIndex: index + 1,
                                 searchCount: (data.searchCount || 0) + 1,
                                 searchedQueries: searchedQueries
-                            }, function () {
-                                executeSearch(lines, index + 1, searchedQueries);
-                            });
+                            }, () => executeSearch(lines, index + 1, searchedQueries));
                         }
                     });
                 }, 10000);
@@ -77,15 +70,9 @@ function typeSearchQuery(tabId, text, charIndex, callback) {
 
         if (charIndex >= text.length) {
             setTimeout(() => {
-                chrome.scripting.executeScript({
-                    target: { tabId: tabId },
-                    func: searchGoogle
-                });
+                chrome.scripting.executeScript({ target: { tabId: tabId }, func: searchGoogle });
                 setTimeout(() => {
-                    chrome.scripting.executeScript({
-                        target: { tabId: tabId },
-                        func: clearSearchField
-                    });
+                    chrome.scripting.executeScript({ target: { tabId: tabId }, func: clearSearchField });
                     callback();
                 }, 6000);
             }, 6000);
@@ -93,15 +80,8 @@ function typeSearchQuery(tabId, text, charIndex, callback) {
         }
 
         let partialText = text.substring(0, charIndex + 1);
-        chrome.scripting.executeScript({
-            target: { tabId: tabId },
-            func: updateSearchField,
-            args: [partialText]
-        });
-
-        setTimeout(() => {
-            typeSearchQuery(tabId, text, charIndex + 1, callback);
-        }, 600);
+        chrome.scripting.executeScript({ target: { tabId: tabId }, func: updateSearchField, args: [partialText] });
+        setTimeout(() => typeSearchQuery(tabId, text, charIndex + 1, callback), 600);
     });
 }
 
