@@ -18,9 +18,15 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
                 executeSearch(data.searchLines, data.currentIndex, data.searchedQueries);
             }
         });
+    } else if (message.action === "saveScriptPrompt") {
+        let userConsent = confirm("क्या आप इस स्क्रिप्ट को सेव करना चाहते हैं?");
+        if (userConsent) {
+            chrome.storage.local.set({ savedScript: message.script });
+            alert("स्क्रिप्ट सेव हो गई!");
+        }
     } else if (message.action === "loadScript") {
-        chrome.storage.local.get(["searchLines", "currentIndex"], function (data) {
-            sendResponse({ script: data.searchLines || [], currentIndex: data.currentIndex || 0 });
+        chrome.storage.local.get(["savedScript"], function (data) {
+            sendResponse({ script: data.savedScript || "" });
         });
         return true;
     }
@@ -32,14 +38,7 @@ function executeSearch(lines, index, searchedQueries) {
 
         let searchText = lines[index].trim();
 
-        if (searchedQueries.includes(searchText)) {
-            chrome.storage.local.set({ currentIndex: index + 1 }, function () {
-                executeSearch(lines, index + 1, searchedQueries);
-            });
-            return;
-        }
-
-        if (searchText === "") {
+        if (searchedQueries.includes(searchText) || searchText === "") {
             chrome.storage.local.set({ currentIndex: index + 1 }, function () {
                 executeSearch(lines, index + 1, searchedQueries);
             });
@@ -68,4 +67,62 @@ function executeSearch(lines, index, searchedQueries) {
             });
         });
     });
+}
+
+function typeSearchQuery(tabId, text, charIndex, callback) {
+    chrome.storage.local.get("stopSearch", function (data) {
+        if (data.stopSearch) return;
+
+        if (charIndex >= text.length) {
+            setTimeout(() => {
+                chrome.scripting.executeScript({
+                    target: { tabId: tabId },
+                    func: searchGoogle
+                });
+                setTimeout(() => {
+                    chrome.scripting.executeScript({
+                        target: { tabId: tabId },
+                        func: clearSearchField
+                    });
+                    callback();
+                }, 6000);
+            }, 6000);
+            return;
+        }
+
+        let partialText = text.substring(0, charIndex + 1);
+        chrome.scripting.executeScript({
+            target: { tabId: tabId },
+            func: updateSearchField,
+            args: [partialText]
+        });
+
+        setTimeout(() => {
+            typeSearchQuery(tabId, text, charIndex + 1, callback);
+        }, 600);
+    });
+}
+
+function updateSearchField(text) {
+    let searchBox = document.querySelector("input[name='q'], textarea[name='q']");
+    if (searchBox) {
+        searchBox.value = text;
+        searchBox.dispatchEvent(new Event('input', { bubbles: true }));
+    }
+}
+
+function searchGoogle() {
+    let searchBox = document.querySelector("input[name='q'], textarea[name='q']");
+    if (searchBox) {
+        let form = searchBox.closest("form");
+        if (form) form.submit();
+    }
+}
+
+function clearSearchField() {
+    let searchBox = document.querySelector("input[name='q'], textarea[name='q']");
+    if (searchBox) {
+        searchBox.value = "";
+        searchBox.dispatchEvent(new Event('input', { bubbles: true }));
+    }
 }
