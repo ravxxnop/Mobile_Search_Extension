@@ -1,34 +1,21 @@
 chrome.runtime.onInstalled.addListener(() => {
-    chrome.storage.local.set({ searchLines: [], currentIndex: 0, stopSearch: false, searchCount: 0, searchedQueries: [] });
-});
-
-chrome.runtime.onStartup.addListener(() => {
-    chrome.storage.local.get(["currentIndex", "searchedQueries"], function (data) {
-        if (data.currentIndex !== undefined && data.searchedQueries !== undefined) {
-            console.log("Resuming from index:", data.currentIndex);
-        } else {
-            chrome.storage.local.set({ currentIndex: 0, searchedQueries: [] });
-        }
+    chrome.storage.local.get(["searchLines", "currentIndex", "stopSearch", "searchCount", "searchedQueries"], function (data) {
+        if (!data.searchLines) chrome.storage.local.set({ searchLines: [] });
+        if (!data.currentIndex) chrome.storage.local.set({ currentIndex: 0 });
+        if (!data.stopSearch) chrome.storage.local.set({ stopSearch: false });
+        if (!data.searchCount) chrome.storage.local.set({ searchCount: 0 });
+        if (!data.searchedQueries) chrome.storage.local.set({ searchedQueries: [] });
     });
 });
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     if (message.action === "startSearching") {
         chrome.storage.local.get(["searchLines", "currentIndex", "stopSearch", "searchCount", "searchedQueries"], function (data) {
-            if (!data.stopSearch && (data.searchCount || 0) < 30 && data.searchLines?.length > 0) {
+            if (data.stopSearch || (data.searchCount || 0) >= 30) return;
+            if (data.searchLines && data.searchLines.length > 0) {
                 executeSearch(data.searchLines, data.currentIndex, data.searchedQueries);
             }
         });
-    } else if (message.action === "saveScriptPrompt") {
-        if (confirm("क्या आप इस स्क्रिप्ट को सेव करना चाहते हैं?")) {
-            chrome.storage.local.set({ savedScript: message.script });
-            alert("स्क्रिप्ट सेव हो गई!");
-        }
-    } else if (message.action === "loadScript") {
-        chrome.storage.local.get(["savedScript"], function (data) {
-            sendResponse({ script: data.savedScript || "" });
-        });
-        return true;
     }
 });
 
@@ -37,8 +24,19 @@ function executeSearch(lines, index, searchedQueries) {
         if (data.stopSearch || index >= lines.length || (data.searchCount || 0) >= 30) return;
 
         let searchText = lines[index].trim();
-        if (!searchText || searchedQueries.includes(searchText)) {
-            chrome.storage.local.set({ currentIndex: index + 1 }, () => executeSearch(lines, index + 1, searchedQueries));
+
+        // अगर यह सर्च पहले हो चुकी है तो स्किप करें
+        if (searchedQueries.includes(searchText)) {
+            chrome.storage.local.set({ currentIndex: index + 1 }, function () {
+                executeSearch(lines, index + 1, searchedQueries);
+            });
+            return;
+        }
+
+        if (searchText === "") {
+            chrome.storage.local.set({ currentIndex: index + 1 }, function () {
+                executeSearch(lines, index + 1, searchedQueries);
+            });
             return;
         }
 
@@ -50,12 +48,14 @@ function executeSearch(lines, index, searchedQueries) {
                 setTimeout(() => {
                     chrome.storage.local.get(["stopSearch", "searchCount", "searchedQueries"], function (data) {
                         if (!data.stopSearch) {
-                            searchedQueries.push(searchText);
+                            searchedQueries.push(searchText); // सर्च को रिकॉर्ड करें
                             chrome.storage.local.set({ 
-                                currentIndex: index + 1,
+                                currentIndex: index + 1, // अब index हर बार सेव होगा
                                 searchCount: (data.searchCount || 0) + 1,
                                 searchedQueries: searchedQueries
-                            }, () => executeSearch(lines, index + 1, searchedQueries));
+                            }, function () {
+                                executeSearch(lines, index + 1, searchedQueries);
+                            });
                         }
                     });
                 }, 10000);
@@ -64,47 +64,11 @@ function executeSearch(lines, index, searchedQueries) {
     });
 }
 
-function typeSearchQuery(tabId, text, charIndex, callback) {
-    chrome.storage.local.get("stopSearch", function (data) {
-        if (data.stopSearch) return;
-
-        if (charIndex >= text.length) {
-            setTimeout(() => {
-                chrome.scripting.executeScript({ target: { tabId: tabId }, func: searchGoogle });
-                setTimeout(() => {
-                    chrome.scripting.executeScript({ target: { tabId: tabId }, func: clearSearchField });
-                    callback();
-                }, 6000);
-            }, 6000);
-            return;
+// ब्राउज़र बंद होने पर डेटा सेफ रखने के लिए पेज लोड होने पर स्टोरेज को रिकवर करें
+chrome.runtime.onStartup.addListener(() => {
+    chrome.storage.local.get(["searchLines", "currentIndex", "stopSearch", "searchCount", "searchedQueries"], function (data) {
+        if (data.searchLines && data.searchLines.length > 0 && !data.stopSearch) {
+            executeSearch(data.searchLines, data.currentIndex, data.searchedQueries);
         }
-
-        let partialText = text.substring(0, charIndex + 1);
-        chrome.scripting.executeScript({ target: { tabId: tabId }, func: updateSearchField, args: [partialText] });
-        setTimeout(() => typeSearchQuery(tabId, text, charIndex + 1, callback), 600);
     });
-}
-
-function updateSearchField(text) {
-    let searchBox = document.querySelector("input[name='q'], textarea[name='q']");
-    if (searchBox) {
-        searchBox.value = text;
-        searchBox.dispatchEvent(new Event('input', { bubbles: true }));
-    }
-}
-
-function searchGoogle() {
-    let searchBox = document.querySelector("input[name='q'], textarea[name='q']");
-    if (searchBox) {
-        let form = searchBox.closest("form");
-        if (form) form.submit();
-    }
-}
-
-function clearSearchField() {
-    let searchBox = document.querySelector("input[name='q'], textarea[name='q']");
-    if (searchBox) {
-        searchBox.value = "";
-        searchBox.dispatchEvent(new Event('input', { bubbles: true }));
-    }
-}
+});
