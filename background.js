@@ -2,6 +2,16 @@ chrome.runtime.onInstalled.addListener(() => {
     chrome.storage.local.set({ searchLines: [], currentIndex: 0, stopSearch: false, searchCount: 0, searchedQueries: [] });
 });
 
+chrome.runtime.onStartup.addListener(() => {
+    chrome.storage.local.get(["currentIndex", "searchedQueries"], function (data) {
+        if (data.currentIndex !== undefined && data.searchedQueries !== undefined) {
+            console.log("Resuming from index:", data.currentIndex);
+        } else {
+            chrome.storage.local.set({ currentIndex: 0, searchedQueries: [] });
+        }
+    });
+});
+
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     if (message.action === "startSearching") {
         chrome.storage.local.get(["searchLines", "currentIndex", "stopSearch", "searchCount", "searchedQueries"], function (data) {
