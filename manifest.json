@@ -1,19 +1,15 @@
 {
-    "manifest_version": 2,
-    "name": "Mobile Search Spoofer",
+    "manifest_version": 3,
+    "name": "Ravi Automatic Search",
     "version": "1.0",
-    "description": "Forces Chrome searches to appear as mobile searches.",
-    "permissions": ["webRequest", "webRequestBlocking", "<all_urls>", "debugger"],
-    "background": {
-        "scripts": ["background.js"],
-        "persistent": true
-    },
-    "content_scripts": [{
-        "matches": ["<all_urls>"],
-        "js": ["content.js"]
-    }],
-    "browser_action": {
+    "description": "Automatically searches text lines from an uploaded file.",
+    "permissions": ["storage", "activeTab", "scripting"],
+    "host_permissions": ["*://www.google.com/*"],
+    "action": {
         "default_popup": "popup.html",
         "default_icon": "icon.png"
+    },
+    "background": {
+        "service_worker": "background.js"
     }
 }
