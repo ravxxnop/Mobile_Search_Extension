@@ -16,7 +16,7 @@ function executeSearch(lines, index) {
         if (stopSearch || searchCount >= 30) return;
 
         if (index >= lines.length) {
-            index = 0;
+            index = 0; // ✅ Loop back to start if script finishes
         }
 
         let searchText = lines[index].trim();
