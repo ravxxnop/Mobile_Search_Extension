@@ -1,4 +1,5 @@
 document.addEventListener('DOMContentLoaded', function () {
+    // ✅ Check if a saved script exists
     chrome.storage.local.get(["savedScript", "currentIndex"], function (data) {
         if (data.savedScript && data.savedScript.length > 0) {
             document.getElementById('loadScriptButton').disabled = false;
@@ -18,8 +19,14 @@ document.getElementById('startButton').addEventListener('click', function () {
     reader.onload = function (event) {
         const lines = event.target.result.split('\n').filter(line => line.trim() !== "");
 
-        chrome.storage.local.set({ savedScript: lines, searchLines: lines, currentIndex: 0 }, function () {
-            alert("Script saved permanently! No need to upload again.");
+        // ✅ Save script permanently as "saved.txt"
+        chrome.storage.local.set({ 
+            savedScript: lines, 
+            searchLines: lines, 
+            currentIndex: 0, 
+            savedFileContent: event.target.result 
+        }, function () {
+            alert("Script saved as 'saved.txt'! No need to upload again.");
             chrome.runtime.sendMessage({ action: "startSearching" });
         });
     };
@@ -31,17 +38,27 @@ document.getElementById('stopButton').addEventListener('click', function () {
 });
 
 document.getElementById('loadScriptButton').addEventListener('click', function () {
-    chrome.storage.local.get(["savedScript", "currentIndex"], function (data) {
+    chrome.storage.local.get(["savedScript", "savedFileContent", "currentIndex"], function (data) {
         if (data.savedScript && data.savedScript.length > 0) {
             let resumeIndex = data.currentIndex ?? 0;
             console.log(`Resuming from search #${resumeIndex + 1}`);
 
+            // ✅ Recreate "saved.txt" and load into file input
+            const blob = new Blob([data.savedFileContent], { type: "text/plain" });
+            const file = new File([blob], "saved.txt", { type: "text/plain" });
+
+            const dataTransfer = new DataTransfer();
+            dataTransfer.items.add(file);
+            document.getElementById('fileInput').files = dataTransfer.files;
+
+            alert("Saved script (saved.txt) loaded successfully!");
+
+            // ✅ Resume search from last saved point
             chrome.storage.local.set({
                 stopSearch: false,
                 searchLines: data.savedScript,
                 currentIndex: resumeIndex
             }, function () {
-                alert("Script loaded successfully! Resuming search.");
                 chrome.runtime.sendMessage({ action: "startSearching" });
             });
 
