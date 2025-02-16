@@ -10,13 +10,10 @@ chrome.runtime.onMessage.addListener(function (message, sender, sendResponse) {
 
 function executeSearch(lines, index) {
     chrome.storage.local.get(["stopSearch", "searchCount"], function (data) {
-        let stopSearch = data.stopSearch || false;
-        let searchCount = data.searchCount || 0;
-
-        if (stopSearch || searchCount >= 30) return;
+        if (data.stopSearch || (data.searchCount || 0) >= 30) return;
 
         if (index >= lines.length) {
-            index = 0; // ✅ Loop back to start if script finishes
+            index = 0; // Restart search from beginning
         }
 
         let searchText = lines[index].trim();
@@ -27,21 +24,22 @@ function executeSearch(lines, index) {
 
         chrome.tabs.query({ active: true, currentWindow: true }, function (tabs) {
             if (tabs.length === 0) return;
-            let tab = tabs[0];
+            let tabId = tabs[0].id;
 
-            if (tab.url.startsWith("chrome://") || tab.url.startsWith("edge://")) {
-                console.log("Invalid tab detected. Cannot search on chrome:// or edge:// pages.");
-                return;
-            }
-
-            let tabId = tab.id;
             typeSearchQuery(tabId, searchText, 0, function () {
                 setTimeout(function () {
+                    let nextIndex = index + 1;
+                    let nextSearchCount = (data.searchCount || 0) + 1;
+
+                    if (nextIndex >= lines.length) {
+                        nextIndex = 0; // Loop back to start
+                    }
+
                     chrome.storage.local.set({
-                        currentIndex: index + 1, 
-                        searchCount: searchCount + 1
+                        currentIndex: nextIndex,
+                        searchCount: nextSearchCount
                     }, function () {
-                        executeSearch(lines, index + 1);
+                        executeSearch(lines, nextIndex);
                     });
                 }, 10000);
             });
@@ -51,8 +49,7 @@ function executeSearch(lines, index) {
 
 function typeSearchQuery(tabId, text, charIndex, callback) {
     chrome.storage.local.get("stopSearch", function (data) {
-        let stopSearch = data.stopSearch || false;
-        if (stopSearch) return;
+        if (data.stopSearch) return;
 
         if (charIndex >= text.length) {
             setTimeout(() => {
